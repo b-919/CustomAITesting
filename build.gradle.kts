@@ -91,7 +91,12 @@ val jarAndroid = tasks.register("jarAndroid"){
                 configurations.runtimeClasspath.get().files +
                 File(platformRoot, "android.jar"))
 
-        val d8 = if(isWindows) "d8.bat" else "d8"
+        val buildToolsRoot = File(sdk, "build-tools").listFiles()
+            ?.sortedDescending()
+            ?.firstOrNull{ File(it, if(isWindows) "d8.bat" else "d8").exists() }
+            ?: throw GradleException("No d8 found in Android SDK build-tools. Ensure you have build-tools installed.")
+
+        val d8 = File(buildToolsRoot, if(isWindows) "d8.bat" else "d8").absolutePath
 
         val command = buildList{
             add(d8)
@@ -101,12 +106,13 @@ val jarAndroid = tasks.register("jarAndroid"){
             add("${projectName}Desktop.jar")
         }
 
-        //dex and desugar files - this requires d8 in your PATH
-        val exitCode = ProcessBuilder(command)
+        //dex and desugar files
+        val processBuilder = ProcessBuilder(command)
             .directory(layout.buildDirectory.dir("libs").get().asFile)
             .inheritIO()
-            .start()
-            .waitFor()
+        processBuilder.environment()["JAVA_HOME"] = System.getProperty("java.home")
+
+        val exitCode = processBuilder.start().waitFor()
 
         if(exitCode != 0) throw GradleException("d8 failed with exit code $exitCode")
     }
